@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import Field
@@ -29,16 +30,24 @@ class PlateAnalysisResponse(ApiModel):
     confidence_explanation: str
 
 
-class ChatHistoryItem(ApiModel):
+class AdvisorMessage(ApiModel):
+    id: str
     role: Literal["user", "assistant"]
-    content: str = Field(min_length=1, max_length=2_000)
+    content: str = Field(min_length=1, max_length=8_000)
+    created_at: datetime
+
+
+class AdvisorConversation(ApiModel):
+    id: str
+    messages: list[AdvisorMessage]
 
 
 class ChatRequest(ApiModel):
     message: str = Field(min_length=1, max_length=2_000)
     timezone: str = Field(default="UTC", min_length=1, max_length=100)
-    history: list[ChatHistoryItem] = Field(default_factory=list, max_length=20)
 
 
 class ChatResponse(ApiModel):
-    message: str
+    conversation_id: str
+    user_message: AdvisorMessage
+    assistant_message: AdvisorMessage

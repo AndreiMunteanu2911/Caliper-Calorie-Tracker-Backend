@@ -6,8 +6,9 @@ import httpx
 from pydantic import ValidationError
 
 from app.core.errors import ExternalServiceError
-from app.schemas.ai import ChatHistoryItem, PlateAnalysisRequest, PlateAnalysisResponse
+from app.schemas.ai import AdvisorMessage, PlateAnalysisRequest, PlateAnalysisResponse
 from app.schemas.macros import DailyMacroProgress
+from app.services.advisor_service import NutritionHistorySummary, TodayMeal
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODEL = "openrouter/free"
@@ -204,13 +205,26 @@ async def analyze_plate(
 async def chat_with_advisor(
     client: httpx.AsyncClient,
     message: str,
-    history: list[ChatHistoryItem],
+    history: list[AdvisorMessage],
     progress: DailyMacroProgress,
+    today_meals: list[TodayMeal],
+    history_summary: NutritionHistorySummary,
     api_key: str,
     app_url: str | None,
     app_name: str | None,
 ) -> str:
     _require_api_key(api_key)
+    meal_lines = (
+        "\n".join(
+            (
+                f"- {meal.meal_type}: {meal.food_name}, {meal.quantity_g:.0f} g, "
+                f"{meal.calories:.0f} kcal, P {meal.protein:.1f} g, "
+                f"C {meal.carbs:.1f} g, F {meal.fats:.1f} g"
+            )
+            for meal in today_meals
+        )
+        or "- No foods logged today."
+    )
     payload = await _post_completion(
         client,
         api_key,
@@ -229,7 +243,21 @@ async def chat_with_advisor(
                         f"Remaining calories: {progress.remaining.calories:.0f} kcal\n"
                         f"Protein needed: {progress.remaining.protein:.1f} g\n"
                         f"Carbs remaining: {progress.remaining.carbs:.1f} g\n"
-                        f"Fats remaining: {progress.remaining.fats:.1f} g"
+                        f"Fats remaining: {progress.remaining.fats:.1f} g\n\n"
+                        f"Foods logged today:\n{meal_lines}\n\n"
+                        f"Last {history_summary.calendar_days} calendar days:\n"
+                        f"Days with food logs: {history_summary.logged_days}\n"
+                        f"Daily average calories: "
+                        f"{history_summary.average_calories:.0f} kcal\n"
+                        f"Daily average protein: "
+                        f"{history_summary.average_protein:.1f} g\n"
+                        f"Daily average carbs: "
+                        f"{history_summary.average_carbs:.1f} g\n"
+                        f"Daily average fats: "
+                        f"{history_summary.average_fats:.1f} g\n"
+                        "Treat missing logging days as incomplete data, not confirmed "
+                        "zero intake. Refer to specific foods when useful and distinguish "
+                        "observed logs from inference."
                     ),
                 },
                 *[

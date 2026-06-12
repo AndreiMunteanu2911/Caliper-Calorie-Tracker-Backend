@@ -47,6 +47,7 @@ app/
 supabase/
   migrations/
     001_init.sql       Tables, functions, triggers, indexes, and RLS
+    002_advisor_conversations.sql  Persistent advisor history and RLS
 
 main.py                FastAPI application and global error handlers
 ```
@@ -96,6 +97,7 @@ OPENROUTER_API_KEY=your-openrouter-key
 OPENROUTER_APP_URL=
 OPENROUTER_APP_NAME=
 CORS_ORIGINS=http://localhost:8081,http://localhost:19006
+CORS_ORIGIN_REGEX=^https?://(?:localhost|127\.0\.0\.1)(?::\d+)?$
 ```
 
 ### Required Variables
@@ -112,7 +114,8 @@ The backend supports:
 - `SUPABASE_JWT_SECRET` for legacy HS256 projects
 - `SUPABASE_URL` JWKS discovery for asymmetric RS256/ES256 projects
 
-When both are provided, `SUPABASE_JWT_SECRET` is used.
+The backend reads the token algorithm and selects HS256 secret verification or
+asymmetric JWKS verification accordingly.
 
 ### Optional OpenRouter Attribution
 
@@ -125,21 +128,27 @@ access and may remain empty.
 `CORS_ORIGINS` is a comma-separated allowlist. Add production web origins and
 any Expo Web development origins that need browser access.
 
+`CORS_ORIGIN_REGEX` defaults to localhost and `127.0.0.1` on any port so Expo
+Web remains usable if its development port changes.
+
 Native iOS and Android requests are not governed by browser CORS enforcement.
 
 ## Database Setup
 
-The migration is located at:
+The migrations are located at:
 
 ```text
 supabase/migrations/001_init.sql
+supabase/migrations/002_advisor_conversations.sql
 ```
 
-It creates:
+They create:
 
 - `profiles`
 - `custom_foods`
 - `meal_logs`
+- `advisor_conversations`
+- `advisor_messages`
 - profile creation and timestamp triggers
 - daily macro aggregation function
 - indexes for user/date and food-name access
@@ -256,12 +265,18 @@ then validates the extracted object against the strict Pydantic response model.
 ### Diet Advisor
 
 ```http
+GET  /api/v1/ai/chat
 POST /api/v1/ai/chat
 ```
 
-The backend calculates live daily macro progress and injects remaining calories,
-protein, carbohydrates, and fats into the advisor system prompt. Up to 20 prior
-conversation messages may be supplied for context.
+The backend owns and persists advisor history. It loads up to 20 recent messages
+for model context and returns up to 200 recent messages to the client.
+
+Each advisor request includes live remaining macros, every food logged today,
+30 calendar days of aggregate calorie and macro averages, and the number of days
+that contain food logs. Missing days are treated as incomplete data rather than
+confirmed zero intake. User and assistant messages are committed together after
+OpenRouter returns successfully.
 
 ## Error Format
 

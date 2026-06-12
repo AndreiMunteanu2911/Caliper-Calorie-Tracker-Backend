@@ -24,6 +24,9 @@ class Settings(BaseModel):
         "http://localhost:8081",
         "http://localhost:19006",
     )
+    cors_origin_regex: str | None = (
+        r"^https?://(?:localhost|127\.0\.0\.1)(?::\d+)?$"
+    )
 
 
 @lru_cache
@@ -44,4 +47,6 @@ def get_settings() -> Settings:
         openrouter_app_name=getenv("OPENROUTER_APP_NAME") or None,
         cors_origins=cors_origins
         or ("http://localhost:8081", "http://localhost:19006"),
+        cors_origin_regex=getenv("CORS_ORIGIN_REGEX")
+        or r"^https?://(?:localhost|127\.0\.0\.1)(?::\d+)?$",
     )

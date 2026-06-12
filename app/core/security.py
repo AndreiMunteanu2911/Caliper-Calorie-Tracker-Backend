@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from functools import lru_cache
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -18,7 +19,13 @@ class AuthenticatedUser:
 
 def _decode_token(token: str, settings: Settings) -> dict[str, object]:
     options = {"require": ["exp", "sub"]}
-    if settings.supabase_jwt_secret:
+    algorithm = jwt.get_unverified_header(token).get("alg")
+
+    if algorithm == "HS256":
+        if not settings.supabase_jwt_secret:
+            raise RuntimeError(
+                "SUPABASE_JWT_SECRET is required for HS256 access tokens"
+            )
         return jwt.decode(
             token,
             settings.supabase_jwt_secret,
@@ -26,18 +33,30 @@ def _decode_token(token: str, settings: Settings) -> dict[str, object]:
             audience="authenticated",
             options=options,
         )
-    if not settings.supabase_url:
-        raise RuntimeError("SUPABASE_URL or SUPABASE_JWT_SECRET must be configured")
 
-    signing_key = PyJWKClient(
-        f"{settings.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
-    ).get_signing_key_from_jwt(token)
-    return jwt.decode(
-        token,
-        signing_key.key,
-        algorithms=["RS256", "ES256"],
-        audience="authenticated",
-        options=options,
+    if algorithm in {"RS256", "ES256"}:
+        if not settings.supabase_url:
+            raise RuntimeError(
+                "SUPABASE_URL is required for asymmetric access tokens"
+            )
+        signing_key = _get_jwk_client(
+            settings.supabase_url
+        ).get_signing_key_from_jwt(token)
+        return jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=[algorithm],
+            audience="authenticated",
+            options=options,
+        )
+
+    raise RuntimeError(f"Unsupported Supabase JWT algorithm: {algorithm}")
+
+
+@lru_cache(maxsize=4)
+def _get_jwk_client(supabase_url: str) -> PyJWKClient:
+    return PyJWKClient(
+        f"{supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
     )
 
 

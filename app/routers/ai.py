@@ -6,10 +6,18 @@ from app.core.config import Settings, get_settings
 from app.core.database import get_database
 from app.core.security import AuthenticatedUser, get_current_user
 from app.schemas.ai import (
+    AdvisorConversation,
     ChatRequest,
     ChatResponse,
     PlateAnalysisRequest,
     PlateAnalysisResponse,
+)
+from app.services.advisor_service import (
+    get_conversation,
+    get_nutrition_context,
+    get_or_create_conversation,
+    get_recent_messages,
+    save_exchange,
 )
 from app.services.ai_service import analyze_plate, chat_with_advisor
 from app.services.macro_service import get_daily_macro_progress
@@ -33,6 +41,14 @@ async def analyze_plate_image(
         )
 
 
+@router.get("/chat", response_model=AdvisorConversation)
+async def advisor_history(
+    user: AuthenticatedUser = Depends(get_current_user),
+    connection: asyncpg.Connection = Depends(get_database),
+) -> AdvisorConversation:
+    return await get_conversation(connection, user.id)
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def advisor_chat(
     request: ChatRequest,
@@ -45,15 +61,39 @@ async def advisor_chat(
         user.id,
         request.timezone,
     )
+    conversation_id = await get_or_create_conversation(connection, user.id)
+    history = await get_recent_messages(
+        connection,
+        conversation_id,
+        user.id,
+    )
+    today_meals, history_summary = await get_nutrition_context(
+        connection,
+        user.id,
+        request.timezone,
+    )
 
     async with httpx.AsyncClient(timeout=60) as client:
-        message = await chat_with_advisor(
+        assistant_content = await chat_with_advisor(
             client,
             request.message,
-            request.history,
+            history,
             progress,
+            today_meals,
+            history_summary,
             settings.openrouter_api_key,
             settings.openrouter_app_url,
             settings.openrouter_app_name,
         )
-    return ChatResponse(message=message)
+    user_message, assistant_message = await save_exchange(
+        connection,
+        conversation_id,
+        user.id,
+        request.message,
+        assistant_content,
+    )
+    return ChatResponse(
+        conversation_id=conversation_id,
+        user_message=user_message,
+        assistant_message=assistant_message,
+    )
