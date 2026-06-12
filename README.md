@@ -1,7 +1,7 @@
 # Caliper Backend
 
 FastAPI service for Caliper authentication, food lookup, meal logging, macro
-aggregation, AI plate analysis, and diet advisor chat.
+aggregation, AI meal analysis, and diet advisor chat.
 
 ## Features
 
@@ -103,7 +103,7 @@ CORS_ORIGINS=http://localhost:8081,http://localhost:19006
 - `DATABASE_URL`: direct PostgreSQL connection used by `asyncpg`
 - `SUPABASE_URL`: used to obtain Supabase JWKS when asymmetric JWT signing is enabled
 - `USDA_API_KEY`: USDA FoodData Central access
-- `OPENROUTER_API_KEY`: plate analysis and advisor chat
+- `OPENROUTER_API_KEY`: meal analysis and advisor chat
 
 ### Supabase JWT Verification
 
