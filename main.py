@@ -1,8 +1,5 @@
 import logging
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 
-import asyncpg
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,25 +13,7 @@ from app.schemas.errors import ErrorDetail, ErrorResponse
 
 settings = get_settings()
 logger = logging.getLogger("caliper.api")
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    if not settings.database_url:
-        raise RuntimeError("DATABASE_URL must be configured")
-    app.state.database_pool = await asyncpg.create_pool(
-        settings.database_url,
-        min_size=1,
-        max_size=10,
-        command_timeout=20,
-    )
-    try:
-        yield
-    finally:
-        await app.state.database_pool.close()
-
-
-app = FastAPI(title=settings.app_name, version="1.0.0", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),

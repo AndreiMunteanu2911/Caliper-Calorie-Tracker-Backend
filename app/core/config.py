@@ -1,7 +1,11 @@
 from functools import lru_cache
 from os import getenv
 
+from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict
+
+load_dotenv(".env.local")
+load_dotenv()
 
 
 class Settings(BaseModel):

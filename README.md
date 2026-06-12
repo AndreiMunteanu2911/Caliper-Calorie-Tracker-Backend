@@ -79,10 +79,10 @@ python -m pip install -r requirements.txt
 
 ## Environment
 
-Create `.env` from `.env.example`:
+Create an uncommitted `.env.local` from `.env.example`:
 
 ```powershell
-Copy-Item .env.example .env
+Copy-Item .env.example .env.local
 ```
 
 Configure:
@@ -157,7 +157,11 @@ before applying it to an established project.
 
 ## Development
 
-Load `.env` into the process using your preferred environment manager, then run:
+The backend loads `.env.local` and `.env` automatically for local development.
+Existing process variables take precedence, so Vercel-injected values are not
+overwritten.
+
+Run:
 
 ```powershell
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
@@ -301,13 +305,99 @@ Never expose the Supabase service-role key to the frontend.
 
 ## Deployment
 
-`vercel.json` contains a Vercel Python deployment configuration. Configure all
-environment variables in the deployment environment.
+## Deploying FastAPI To Vercel
 
-The application uses a persistent asyncpg connection pool during the FastAPI
-lifespan. Confirm the chosen serverless platform and Supabase connection mode
-support the expected concurrency and connection limits. Supabase's pooler is
-recommended for serverless deployment.
+The backend and frontend must be deployed as separate Vercel projects. Deploy
+this backend first.
+
+### 1. Prepare Supabase
+
+Apply the database migration and obtain:
+
+- Supabase project URL
+- PostgreSQL pooler connection string
+- Supabase JWT secret for HS256 projects, or use project JWKS through
+  `SUPABASE_URL`
+
+For serverless deployments, use the Supabase transaction pooler connection
+string. If Supabase does not include it automatically, append
+`?sslmode=require`.
+The API disables asyncpg's prepared-statement cache for transaction-pooler
+compatibility.
+
+### 2. Create The Backend Project
+
+Import this repository into Vercel and configure:
+
+- Root Directory: repository root
+- Framework Preset: FastAPI, if detected; otherwise Other
+- Python version: 3.13 where available
+
+`vercel.json` routes all requests to `main.py`.
+
+### 3. Configure Vercel Variables
+
+In Vercel Project Settings, add the following for Production:
+
+```env
+DATABASE_URL=postgresql://...
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_JWT_SECRET=
+USDA_API_KEY=your-usda-key
+OPENROUTER_API_KEY=your-openrouter-key
+OPENROUTER_APP_URL=https://your-frontend.vercel.app
+OPENROUTER_APP_NAME=Caliper
+CORS_ORIGINS=https://your-frontend.vercel.app
+```
+
+`OPENROUTER_APP_URL` and `OPENROUTER_APP_NAME` remain optional. The other
+provider and database values are required for their respective features.
+
+Configure Preview separately. Do not give untrusted preview branches production
+database credentials.
+
+### 4. Deploy
+
+Push to the production branch or run:
+
+```powershell
+npx vercel --prod
+```
+
+Verify:
+
+```text
+https://your-backend.vercel.app/health
+https://your-backend.vercel.app/docs
+```
+
+### 5. Connect The Frontend
+
+Set the frontend Vercel project's production variable:
+
+```env
+EXPO_PUBLIC_API_URL=https://your-backend.vercel.app/api/v1
+```
+
+Set backend CORS to the exact frontend origin and redeploy both projects after
+changing environment values.
+
+### Environment Strategy
+
+Use:
+
+- `.env.local`: uncommitted local secrets and localhost configuration
+- Vercel Development variables: values pulled by `vercel env pull`
+- Vercel Preview variables: staging or restricted preview services
+- Vercel Production variables: production secrets and URLs
+- `.env.example`: committed variable-name documentation
+
+Do not commit `.env.production` containing secrets. Vercel environment scoping
+is the authoritative production configuration.
+
+The application creates its asyncpg pool lazily on the first database-backed
+request. This allows `/health` to start independently and avoids crashing a
+Vercel function during module initialization.
 
 ## Operational Notes
 
@@ -318,4 +408,3 @@ recommended for serverless deployment.
 - Daily aggregation uses the supplied IANA timezone and PostgreSQL date
   conversion.
 - CORS should be restricted to known production web origins.
-
