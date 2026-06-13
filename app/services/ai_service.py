@@ -1,5 +1,6 @@
 import json
 import re
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -269,3 +270,91 @@ async def chat_with_advisor(
         },
     )
     return _completion_content(payload)
+
+
+async def stream_advisor_chat(
+    client: httpx.AsyncClient,
+    message: str,
+    history: list[AdvisorMessage],
+    progress: DailyMacroProgress,
+    today_meals: list[TodayMeal],
+    history_summary: NutritionHistorySummary,
+    api_key: str,
+    app_url: str | None,
+    app_name: str | None,
+) -> AsyncIterator[str]:
+    _require_api_key(api_key)
+    meal_lines = (
+        "\n".join(
+            (
+                f"- {meal.meal_type}: {meal.food_name}, {meal.quantity_g:.0f} g, "
+                f"{meal.calories:.0f} kcal, P {meal.protein:.1f} g, "
+                f"C {meal.carbs:.1f} g, F {meal.fats:.1f} g"
+            )
+            for meal in today_meals
+        )
+        or "- No foods logged today."
+    )
+    payload = {
+        "model": OPENROUTER_MODEL,
+        "stream": True,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a practical hypertrophy and sports nutrition advisor. "
+                    "Use the user's live daily progress below. Do not diagnose medical "
+                    "conditions. Give concise, actionable guidance. Format responses "
+                    "with clean Markdown headings, short paragraphs, and lists. Avoid "
+                    "wide tables unless the user explicitly asks for one.\n"
+                    f"Date: {progress.date} ({progress.timezone})\n"
+                    f"Remaining calories: {progress.remaining.calories:.0f} kcal\n"
+                    f"Protein needed: {progress.remaining.protein:.1f} g\n"
+                    f"Carbs remaining: {progress.remaining.carbs:.1f} g\n"
+                    f"Fats remaining: {progress.remaining.fats:.1f} g\n\n"
+                    f"Foods logged today:\n{meal_lines}\n\n"
+                    f"Last {history_summary.calendar_days} calendar days:\n"
+                    f"Days with food logs: {history_summary.logged_days}\n"
+                    f"Daily average calories: "
+                    f"{history_summary.average_calories:.0f} kcal\n"
+                    f"Daily average protein: "
+                    f"{history_summary.average_protein:.1f} g\n"
+                    f"Daily average carbs: "
+                    f"{history_summary.average_carbs:.1f} g\n"
+                    f"Daily average fats: "
+                    f"{history_summary.average_fats:.1f} g\n"
+                    "Treat missing logging days as incomplete data, not confirmed "
+                    "zero intake. Refer to specific foods when useful and distinguish "
+                    "observed logs from inference."
+                ),
+            },
+            *[
+                {"role": item.role, "content": item.content}
+                for item in history[-20:]
+            ],
+            {"role": "user", "content": message},
+        ],
+    }
+    try:
+        async with client.stream(
+            "POST",
+            OPENROUTER_URL,
+            headers=_headers(api_key, app_url, app_name),
+            json=payload,
+        ) as response:
+            response.raise_for_status()
+            async for line in response.aiter_lines():
+                if not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if not data or data == "[DONE]":
+                    continue
+                value = json.loads(data)
+                delta = value.get("choices", [{}])[0].get("delta", {}).get("content")
+                if isinstance(delta, str) and delta:
+                    yield delta
+    except (httpx.HTTPError, json.JSONDecodeError, KeyError, IndexError) as exc:
+        raise ExternalServiceError(
+            "OpenRouter",
+            "The AI service is temporarily unavailable.",
+        ) from exc

@@ -1,14 +1,17 @@
 from dataclasses import dataclass
 from functools import lru_cache
+import logging
 
+import httpx
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient
 
 from app.core.config import Settings, get_settings
 
 bearer_scheme = HTTPBearer(auto_error=False)
+logger = logging.getLogger("caliper.auth")
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,8 +63,53 @@ def _get_jwk_client(supabase_url: str) -> PyJWKClient:
     )
 
 
+async def _verify_with_supabase(
+    token: str,
+    api_key: str | None,
+    settings: Settings,
+) -> AuthenticatedUser | None:
+    if not settings.supabase_url or not api_key:
+        return None
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            response = await client.get(
+                f"{settings.supabase_url.rstrip('/')}/auth/v1/user",
+                headers={
+                    "apikey": api_key,
+                    "Authorization": f"Bearer {token}",
+                },
+            )
+    except httpx.HTTPError as exc:
+        logger.warning(
+            "Supabase token verification request failed: %s",
+            type(exc).__name__,
+        )
+        return None
+
+    if response.status_code != status.HTTP_200_OK:
+        return None
+
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    subject = payload.get("id") if isinstance(payload, dict) else None
+    if not isinstance(subject, str):
+        return None
+    email = payload.get("email")
+    return AuthenticatedUser(
+        id=subject,
+        email=email if isinstance(email, str) else None,
+    )
+
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    supabase_api_key: str | None = Header(
+        default=None,
+        alias="X-Supabase-Api-Key",
+    ),
     settings: Settings = Depends(get_settings),
 ) -> AuthenticatedUser:
     if credentials is None:
@@ -72,6 +120,17 @@ async def get_current_user(
     try:
         payload = _decode_token(credentials.credentials, settings)
     except (jwt.PyJWTError, RuntimeError) as exc:
+        logger.warning(
+            "Local bearer-token verification failed: %s",
+            type(exc).__name__,
+        )
+        verified_user = await _verify_with_supabase(
+            credentials.credentials,
+            supabase_api_key,
+            settings,
+        )
+        if verified_user is not None:
+            return verified_user
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired bearer token",

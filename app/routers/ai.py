@@ -1,6 +1,9 @@
+import json
+
 import asyncpg
 import httpx
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 
 from app.core.config import Settings, get_settings
 from app.core.database import get_database
@@ -19,7 +22,7 @@ from app.services.advisor_service import (
     get_recent_messages,
     save_exchange,
 )
-from app.services.ai_service import analyze_plate, chat_with_advisor
+from app.services.ai_service import analyze_plate, chat_with_advisor, stream_advisor_chat
 from app.services.macro_service import get_daily_macro_progress
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -96,4 +99,77 @@ async def advisor_chat(
         conversation_id=conversation_id,
         user_message=user_message,
         assistant_message=assistant_message,
+    )
+
+
+@router.post("/chat/stream")
+async def advisor_chat_stream(
+    request: ChatRequest,
+    user: AuthenticatedUser = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+    connection: asyncpg.Connection = Depends(get_database),
+) -> StreamingResponse:
+    progress = await get_daily_macro_progress(
+        connection,
+        user.id,
+        request.timezone,
+    )
+    conversation_id = await get_or_create_conversation(connection, user.id)
+    history = await get_recent_messages(connection, conversation_id, user.id)
+    today_meals, history_summary = await get_nutrition_context(
+        connection,
+        user.id,
+        request.timezone,
+    )
+
+    async def events():
+        chunks: list[str] = []
+        try:
+            async with httpx.AsyncClient(timeout=90) as client:
+                async for chunk in stream_advisor_chat(
+                    client,
+                    request.message,
+                    history,
+                    progress,
+                    today_meals,
+                    history_summary,
+                    settings.openrouter_api_key,
+                    settings.openrouter_app_url,
+                    settings.openrouter_app_name,
+                ):
+                    chunks.append(chunk)
+                    yield json.dumps({"type": "delta", "content": chunk}) + "\n"
+
+            assistant_content = "".join(chunks).strip()
+            if not assistant_content:
+                raise RuntimeError("The AI service returned an empty response.")
+            user_message, assistant_message = await save_exchange(
+                connection,
+                conversation_id,
+                user.id,
+                request.message,
+                assistant_content,
+            )
+            yield (
+                json.dumps(
+                    {
+                        "type": "done",
+                        "user_message": user_message.model_dump(mode="json"),
+                        "assistant_message": assistant_message.model_dump(mode="json"),
+                    }
+                )
+                + "\n"
+            )
+        except Exception as exc:
+            yield json.dumps(
+                {
+                    "type": "error",
+                    "message": str(exc) or "Unable to send message.",
+                }
+            ) + "\n"
+
+    return StreamingResponse(
+        events(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
