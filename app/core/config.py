@@ -48,5 +48,5 @@ def get_settings() -> Settings:
         cors_origins=cors_origins
         or ("http://localhost:8081", "http://localhost:19006"),
         cors_origin_regex=getenv("CORS_ORIGIN_REGEX")
-        or r"^https?://(?:localhost|127\.0\.0\.1)(?::\d+)?$",
+        or r"^https?://(?:localhost|127\.0\.0\.1)(?::\d+)?$|^https://caliperam\.vercel\.app$",
     )
