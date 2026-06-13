@@ -2,8 +2,9 @@ import json
 
 import asyncpg
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
+from uuid import UUID
 
 from app.core.config import Settings, get_settings
 from app.core.database import get_database
@@ -16,10 +17,12 @@ from app.schemas.ai import (
     PlateAnalysisResponse,
 )
 from app.services.advisor_service import (
+    create_conversation,
     get_conversation,
     get_nutrition_context,
     get_or_create_conversation,
     get_recent_messages,
+    list_conversations,
     save_exchange,
 )
 from app.services.ai_service import analyze_plate, chat_with_advisor, stream_advisor_chat
@@ -44,12 +47,30 @@ async def analyze_plate_image(
         )
 
 
+@router.get("/conversations")
+async def advisor_conversations(
+    user: AuthenticatedUser = Depends(get_current_user),
+    connection: asyncpg.Connection = Depends(get_database),
+) -> list[dict[str, object]]:
+    return await list_conversations(connection, user.id)
+
+
+@router.post("/conversations")
+async def new_conversation(
+    user: AuthenticatedUser = Depends(get_current_user),
+    connection: asyncpg.Connection = Depends(get_database),
+) -> dict[str, str]:
+    conversation_id = await create_conversation(connection, user.id)
+    return {"id": conversation_id}
+
+
 @router.get("/chat", response_model=AdvisorConversation)
 async def advisor_history(
+    conversation_id: str | None = Query(default=None),
     user: AuthenticatedUser = Depends(get_current_user),
     connection: asyncpg.Connection = Depends(get_database),
 ) -> AdvisorConversation:
-    return await get_conversation(connection, user.id)
+    return await get_conversation(connection, user.id, conversation_id)
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -64,7 +85,7 @@ async def advisor_chat(
         user.id,
         request.timezone,
     )
-    conversation_id = await get_or_create_conversation(connection, user.id)
+    conversation_id = request.conversation_id or await get_or_create_conversation(connection, user.id)
     history = await get_recent_messages(
         connection,
         conversation_id,
@@ -114,7 +135,7 @@ async def advisor_chat_stream(
         user.id,
         request.timezone,
     )
-    conversation_id = await get_or_create_conversation(connection, user.id)
+    conversation_id = request.conversation_id or await get_or_create_conversation(connection, user.id)
     history = await get_recent_messages(connection, conversation_id, user.id)
     today_meals, history_summary = await get_nutrition_context(
         connection,
@@ -154,6 +175,7 @@ async def advisor_chat_stream(
                 json.dumps(
                     {
                         "type": "done",
+                        "conversation_id": conversation_id,
                         "user_message": user_message.model_dump(mode="json"),
                         "assistant_message": assistant_message.model_dump(mode="json"),
                     }

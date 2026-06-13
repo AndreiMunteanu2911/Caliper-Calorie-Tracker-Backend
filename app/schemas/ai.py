@@ -45,6 +45,7 @@ class AdvisorConversation(ApiModel):
 class ChatRequest(ApiModel):
     message: str = Field(min_length=1, max_length=2_000)
     timezone: str = Field(default="UTC", min_length=1, max_length=100)
+    conversation_id: str | None = None
 
 
 class ChatResponse(ApiModel):

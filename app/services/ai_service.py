@@ -163,6 +163,15 @@ async def analyze_plate(
         app_name,
         {
             "model": OPENROUTER_MODEL,
+            "provider": {"require_parameters": True},
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "plate_analysis",
+                    "strict": True,
+                    "schema": PLATE_SCHEMA,
+                },
+            },
             "messages": [
                 {
                     "role": "system",

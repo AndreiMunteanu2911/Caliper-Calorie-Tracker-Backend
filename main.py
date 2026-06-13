@@ -8,7 +8,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import get_settings
 from app.core.errors import ApplicationError
-from app.routers import ai, food, macros, meal_logs, profiles
+from app.routers import ai, custom_foods, food, macros, meal_logs, profiles
 from app.schemas.errors import ErrorDetail, ErrorResponse
 
 settings = get_settings()
@@ -27,6 +27,7 @@ app.include_router(food.router, prefix=settings.api_prefix)
 app.include_router(macros.router, prefix=settings.api_prefix)
 app.include_router(ai.router, prefix=settings.api_prefix)
 app.include_router(meal_logs.router, prefix=settings.api_prefix)
+app.include_router(custom_foods.router, prefix=settings.api_prefix)
 app.include_router(profiles.router, prefix=settings.api_prefix)
 
 

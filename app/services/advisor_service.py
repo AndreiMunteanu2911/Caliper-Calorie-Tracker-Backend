@@ -60,8 +60,6 @@ async def get_or_create_conversation(
         """
         insert into public.advisor_conversations (user_id)
         values ($1::uuid)
-        on conflict (user_id) do update
-        set user_id = excluded.user_id
         returning id
         """,
         user_id,
@@ -71,11 +69,66 @@ async def get_or_create_conversation(
     return str(conversation_id)
 
 
+async def create_conversation(
+    connection: asyncpg.Connection,
+    user_id: str,
+) -> str:
+    conversation_id = await connection.fetchval(
+        """
+        insert into public.advisor_conversations (user_id)
+        values ($1::uuid)
+        returning id
+        """,
+        user_id,
+    )
+    if conversation_id is None:
+        raise RuntimeError("Advisor conversation could not be created")
+    return str(conversation_id)
+
+
+async def list_conversations(
+    connection: asyncpg.Connection,
+    user_id: str,
+) -> list[dict[str, object]]:
+    rows = await connection.fetch(
+        """
+        select id, title, created_at, updated_at
+        from public.advisor_conversations
+        where user_id = $1::uuid
+        order by updated_at desc
+        limit 50
+        """,
+        user_id,
+    )
+    return [
+        {
+            "id": str(row["id"]),
+            "title": row["title"] or f"Conversation {i + 1}",
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+        for i, row in enumerate(rows)
+    ]
+
+
 async def get_conversation(
     connection: asyncpg.Connection,
     user_id: str,
+    conversation_id: str | None = None,
 ) -> AdvisorConversation:
-    conversation_id = await get_or_create_conversation(connection, user_id)
+    if conversation_id is None:
+        conversation_id = await connection.fetchval(
+            """
+            select id from public.advisor_conversations
+            where user_id = $1::uuid
+            order by updated_at desc
+            limit 1
+            """,
+            user_id,
+        )
+        if conversation_id is None:
+            return AdvisorConversation(id="", messages=[])
+        conversation_id = str(conversation_id)
     rows = await connection.fetch(
         """
         select id, role, content, created_at
@@ -94,7 +147,7 @@ async def get_conversation(
         user_id,
     )
     return AdvisorConversation(
-        id=conversation_id,
+        id=str(conversation_id),
         messages=[_message_from_row(row) for row in rows],
     )
 
@@ -199,6 +252,10 @@ async def save_exchange(
     if len(assistant_content) > 8_000:
         assistant_content = assistant_content[:8_000].rstrip()
     async with connection.transaction():
+        is_first = await connection.fetchval(
+            "select count(*) = 0 from public.advisor_messages where conversation_id = $1::uuid",
+            conversation_id,
+        )
         rows = await connection.fetch(
             """
             insert into public.advisor_messages (
@@ -214,6 +271,15 @@ async def save_exchange(
             user_content,
             assistant_content,
         )
+        if is_first:
+            title = user_content[:60].strip()
+            if len(user_content) > 60:
+                title += "..."
+            await connection.execute(
+                "update public.advisor_conversations set title = $1 where id = $2::uuid",
+                title,
+                conversation_id,
+            )
     messages = [_message_from_row(row) for row in rows]
     user_message = next(message for message in messages if message.role == "user")
     assistant_message = next(
