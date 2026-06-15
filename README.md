@@ -1,74 +1,106 @@
 # Caliper Backend
 
-FastAPI service for Caliper authentication, food lookup, meal logging, macro
-aggregation, AI meal analysis, and diet advisor chat.
+This is the service that powers Caliper behind the scenes. The app that users
+see is in `Caliper-Frontend`; this backend stores and protects nutrition data,
+looks up foods, calculates totals, and talks to AI services.
 
-## Features
+In plain terms: the frontend is the interface, and this backend is the engine.
 
-- Supabase JWT authentication
-- Async PostgreSQL connection pooling
-- Timezone-aware daily macro aggregation
-- User-scoped meal-log CRUD
-- Open Food Facts barcode lookup
-- USDA FoodData Central text search
-- OpenRouter free-router vision analysis
-- Context-aware nutrition advisor chat
-- Weight logging with user-scoped history
-- TDEE and automatic calorie/macro goal calculation
-- Strict Pydantic validation
-- Typed global error responses
-- Supabase schema and Row Level Security migration
+## What The Backend Does For Users
 
-## Technology
+Caliper depends on the backend for the core nutrition experience:
 
-- Python 3.13
-- FastAPI
-- Uvicorn
-- Pydantic 2
-- asyncpg
-- httpx
-- PyJWT
-- Supabase PostgreSQL and Auth
-- Open Food Facts
-- USDA FoodData Central
-- OpenRouter
+- Keeps each user's meal logs private and separate.
+- Calculates daily calories and macros from logged foods.
+- Groups logs by local date and timezone.
+- Searches foods through USDA FoodData Central.
+- Looks up packaged foods by barcode through Open Food Facts.
+- Saves custom foods.
+- Analyzes meal photos with AI.
+- Runs the AI nutrition advisor and saves conversation history.
+- Tracks weight entries over time.
+- Calculates calorie and macro targets with a TDEE calculator.
+- Returns helpful error messages when an external service is unavailable.
 
-## Architecture
+Most users never interact with this project directly, but they rely on it every
+time they log food, scan a barcode, open the dashboard, or ask the advisor a
+question.
 
-```text
-app/
-  core/
-    config.py          Environment-backed settings
-    database.py        FastAPI database dependency
-    errors.py          Typed application errors
-    security.py        Supabase JWT verification
-  routers/             HTTP binding and service delegation
-  schemas/             Strict Pydantic request/response models
-  services/            Business logic and external integrations
+## Main Features
 
-supabase/
-  migrations/
-    001_init.sql       Tables, functions, triggers, indexes, and RLS
-    002_advisor_conversations.sql  Persistent advisor history and RLS
-    004_weight_logs.sql  Weight history, indexes, triggers, and RLS
+### Accounts And Privacy
 
-main.py                FastAPI application and global error handlers
-```
+Users sign in through Supabase. The frontend sends the user's Supabase token to
+this backend, and the backend checks that token before allowing access to any
+private data.
 
-Routers contain HTTP concerns only. Database operations, external API calls,
-normalization, aggregation, and AI payload handling live in service modules.
+Database policies also protect user data so one user cannot read another user's
+logs, profile, advisor messages, custom foods, or weight entries.
 
-## Requirements
+### Dashboard Totals
+
+The backend aggregates the foods a user logged for a day and returns:
+
+- calories eaten
+- calories remaining
+- protein, carbs, and fat eaten
+- macro targets
+- editable meal-log rows
+
+Dates are calculated using the user's timezone, so "today" matches the user's
+actual day.
+
+### Food Lookup
+
+The backend can:
+
+- Search USDA foods by text.
+- Find packaged foods by barcode.
+- Normalize nutrition values so the app can calculate nutrients for any amount
+  in grams.
+
+### Meal Photo Analysis
+
+When a user uploads or captures a meal photo, the backend sends the image to
+OpenRouter and asks for structured food estimates. The response is checked
+before it is sent back to the app.
+
+### AI Nutrition Advisor
+
+The advisor uses context from the user's own data:
+
+- today's logged foods
+- today's remaining macros
+- recent calorie and macro history
+- previous messages in the current conversation
+
+Conversation history is saved so the user can come back to older chats.
+
+### Weight And Goals
+
+The backend stores dated weight entries and calculates TDEE-based calorie and
+macro targets from profile details such as age, height, weight, activity level,
+and goal.
+
+## For People Setting It Up
+
+You need accounts/API keys for:
+
+- Supabase, for accounts and the database
+- USDA FoodData Central, for food search
+- OpenRouter, for AI meal analysis and advisor chat
+
+### Requirements
 
 - Python 3.13
 - A Supabase project
-- PostgreSQL connection credentials
+- PostgreSQL connection credentials from Supabase
 - USDA FoodData Central API key
 - OpenRouter API key
 
-## Installation
+## Run Locally
 
-Create and activate a virtual environment:
+Create a virtual environment:
 
 ```powershell
 py -3.13 -m venv .venv
@@ -81,15 +113,13 @@ Install dependencies:
 python -m pip install -r requirements.txt
 ```
 
-## Environment
-
-Create an uncommitted `.env.local` from `.env.example`:
+Create a local environment file:
 
 ```powershell
 Copy-Item .env.example .env.local
 ```
 
-Configure:
+Fill in `.env.local`:
 
 ```env
 DATABASE_URL=postgresql://postgres:password@db.example.supabase.co:5432/postgres
@@ -103,93 +133,73 @@ CORS_ORIGINS=http://localhost:8081,http://localhost:19006
 CORS_ORIGIN_REGEX=^https?://(?:localhost|127\.0\.0\.1)(?::\d+)?$
 ```
 
-### Required Variables
+Start the API:
 
-- `DATABASE_URL`: direct PostgreSQL connection used by `asyncpg`
-- `SUPABASE_URL`: used to obtain Supabase JWKS when asymmetric JWT signing is enabled
-- `USDA_API_KEY`: USDA FoodData Central access
-- `OPENROUTER_API_KEY`: meal analysis and advisor chat
+```powershell
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
 
-### Supabase JWT Verification
+Useful local URLs:
 
-The backend supports:
+- API docs: `http://localhost:8000/docs`
+- Machine-readable API schema: `http://localhost:8000/openapi.json`
+- Health check: `http://localhost:8000/health`
 
-- `SUPABASE_JWT_SECRET` for legacy HS256 projects
-- `SUPABASE_URL` JWKS discovery for asymmetric RS256/ES256 projects
-
-The backend reads the token algorithm and selects HS256 secret verification or
-asymmetric JWKS verification accordingly.
-
-### Optional OpenRouter Attribution
-
-`OPENROUTER_APP_URL` and `OPENROUTER_APP_NAME` only set the optional
-`HTTP-Referer` and `X-Title` OpenRouter headers. They are not required for API
-access and may remain empty.
-
-### CORS
-
-`CORS_ORIGINS` is a comma-separated allowlist. Add production web origins and
-any Expo Web development origins that need browser access.
-
-`CORS_ORIGIN_REGEX` defaults to localhost and `127.0.0.1` on any port so Expo
-Web remains usable if its development port changes.
-
-Native iOS and Android requests are not governed by browser CORS enforcement.
+The backend loads `.env.local` and `.env` automatically during local
+development. Environment variables already set by the operating system or Vercel
+take priority.
 
 ## Database Setup
 
-The migrations are located at:
+The database migrations live in:
 
 ```text
-supabase/migrations/001_init.sql
-supabase/migrations/002_advisor_conversations.sql
-supabase/migrations/004_weight_logs.sql
+supabase/migrations/
 ```
 
-They create:
+They create the tables, indexes, helper functions, triggers, and Row Level
+Security rules for:
 
-- `profiles`
-- `custom_foods`
-- `meal_logs`
-- `advisor_conversations`
-- `advisor_messages`
-- `weight_logs`
-- profile creation and timestamp triggers
-- daily macro aggregation function
-- indexes for user/date and food-name access
-- SELECT, INSERT, UPDATE, and DELETE RLS policies
+- profiles
+- custom foods
+- meal logs
+- advisor conversations
+- advisor messages
+- weight logs
 
-Apply it with the Supabase CLI from this repository:
+Apply them with the Supabase CLI:
 
 ```powershell
 supabase link --project-ref your-project-ref
 supabase db push
 ```
 
-The migration assumes a new database schema. Review existing production schemas
-before applying it to an established project.
+The migrations assume a Caliper database schema. Review them carefully before
+applying them to an existing production database.
 
-## Development
+## Environment Variables Explained
 
-The backend loads `.env.local` and `.env` automatically for local development.
-Existing process variables take precedence, so Vercel-injected values are not
-overwritten.
+- `DATABASE_URL`: PostgreSQL connection string used by the backend.
+- `SUPABASE_URL`: Supabase project URL, also used for modern JWT verification.
+- `SUPABASE_JWT_SECRET`: JWT secret for older HS256 Supabase projects. Leave
+  blank if your project uses JWKS/asymmetric signing.
+- `USDA_API_KEY`: enables food search.
+- `OPENROUTER_API_KEY`: enables meal photo analysis and advisor chat.
+- `OPENROUTER_APP_URL`: optional OpenRouter attribution URL.
+- `OPENROUTER_APP_NAME`: optional OpenRouter attribution name.
+- `CORS_ORIGINS`: web origins allowed to call the backend from a browser.
+- `CORS_ORIGIN_REGEX`: development-friendly origin pattern.
 
-Run:
+Native iOS and Android requests are not limited by browser CORS rules, but Expo
+Web is.
 
-```powershell
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
+Never expose database passwords, OpenRouter keys, USDA keys, or Supabase
+service-role keys in the frontend.
 
-API documentation:
+## API Overview
 
-- Swagger UI: `http://localhost:8000/docs`
-- OpenAPI JSON: `http://localhost:8000/openapi.json`
-- Health check: `http://localhost:8000/health`
-
-## API
-
-All `/api/v1` routes require a valid Supabase bearer token.
+All `/api/v1` routes require a valid Supabase bearer token unless noted
+otherwise.
 
 ### Dashboard
 
@@ -197,93 +207,51 @@ All `/api/v1` routes require a valid Supabase bearer token.
 GET /api/v1/dashboard?timezone=Europe/Bucharest
 ```
 
-Returns server-aggregated daily macro progress and the authenticated user's
-editable meal-log rows for that local date.
+Returns today's nutrition totals and editable meal logs for the signed-in user.
 
 ### Meal Logs
 
 ```http
-POST /api/v1/meal-logs
-PATCH /api/v1/meal-logs/{log_id}
+POST   /api/v1/meal-logs
+PATCH  /api/v1/meal-logs/{log_id}
 DELETE /api/v1/meal-logs/{log_id}
 ```
 
-Create payload:
+Meal logs store the original food nutrition values and the amount eaten. If a
+user changes the amount later, nutrients are recalculated from the original
+per-100 g values.
 
-```json
-{
-  "food": {
-    "external_id": "171077",
-    "source": "usda",
-    "name": "Chicken breast, roasted",
-    "brand": null,
-    "serving_size_g": 100,
-    "calories": 165,
-    "protein": 31,
-    "carbs": 0,
-    "fats": 3.6
-  },
-  "meal_type": "lunch",
-  "quantity_g": 180
-}
-```
-
-The service stores immutable per-100 g nutrient values and calculates the
-consumed nutrient snapshot. Weight edits are recalculated from the original
-per-100 g values to avoid cumulative rounding drift.
-
-### Barcode Lookup
-
-```http
-GET /api/v1/food/barcode/3017620422003
-```
-
-Normalizes Open Food Facts nutrition values per 100 g.
-
-### Food Search
+### Food Search And Barcode Lookup
 
 ```http
 GET /api/v1/food/search?query=chicken
+GET /api/v1/food/barcode/3017620422003
 ```
 
-Searches USDA Foundation and SR Legacy foods and normalizes calories, protein,
-carbohydrates, and fats per 100 g.
+Search uses USDA FoodData Central. Barcode lookup uses Open Food Facts.
 
-### Plate Analysis
+### AI Meal Analysis
 
 ```http
 POST /api/v1/ai/analyze-plate
 ```
 
-Accepts base64 image data, media type, and optional meal context. OpenRouter is
-called with:
+Accepts image data and returns estimated foods, calories, protein, carbs, fats,
+and a confidence explanation.
 
-```json
-{
-  "model": "openrouter/free"
-}
-```
-
-The parser handles plain JSON, fenced JSON markdown, and surrounding model text,
-then validates the extracted object against the strict Pydantic response model.
-
-### Diet Advisor
+### AI Advisor
 
 ```http
+GET  /api/v1/ai/conversations
 GET  /api/v1/ai/chat
 POST /api/v1/ai/chat
 ```
 
-The backend owns and persists advisor history. It loads up to 20 recent messages
-for model context and returns up to 200 recent messages to the client.
+The backend owns advisor history and sends relevant nutrition context to the AI
+model. User and assistant messages are saved together after a successful
+response.
 
-Each advisor request includes live remaining macros, every food logged today,
-30 calendar days of aggregate calorie and macro averages, and the number of days
-that contain food logs. Missing days are treated as incomplete data rather than
-confirmed zero intake. User and assistant messages are committed together after
-OpenRouter returns successfully.
-
-### Weight History
+### Weight Logs
 
 ```http
 GET    /api/v1/weight-logs
@@ -291,7 +259,7 @@ POST   /api/v1/weight-logs
 DELETE /api/v1/weight-logs/{log_id}
 ```
 
-Saving another entry for the same date updates that date's weight.
+Saving a new entry for a date that already has one updates that date's weight.
 
 ### TDEE Calculator
 
@@ -299,13 +267,12 @@ Saving another entry for the same date updates that date's weight.
 POST /api/v1/profile/tdee
 ```
 
-Uses the Mifflin-St Jeor equation, an activity multiplier, and the selected
-lose, maintain, or gain goal. The response includes calorie and macro targets
-that can be applied to the user's profile.
+Uses the Mifflin-St Jeor equation, an activity multiplier, and the selected goal
+to estimate calorie and macro targets.
 
-## Error Format
+## Error Responses
 
-Errors use a consistent envelope:
+Errors use a consistent shape:
 
 ```json
 {
@@ -316,68 +283,76 @@ Errors use a consistent envelope:
 }
 ```
 
-Handled categories include:
+The backend handles common cases such as invalid input, missing resources,
+authentication problems, invalid timezones, external API failures, malformed
+external API responses, and unexpected internal failures.
 
-- request validation errors
-- authentication and HTTP errors
-- missing resources
-- invalid timezones
-- external API failures
-- malformed external API payloads
-- unexpected internal failures
+Unexpected technical details are logged on the server but are not shown to the
+user.
 
-Unexpected exception details are logged server-side and are not exposed to the
-client.
+## How The Code Is Organized
 
-## Authentication And Authorization
+```text
+app/
+  core/
+    config.py          Reads settings from environment variables
+    database.py        Database connection management
+    errors.py          Shared error types
+    security.py        Supabase token verification
+  routers/             API route definitions
+  schemas/             Request and response shapes
+  services/            Food, meal, AI, profile, and weight logic
 
-The mobile client sends its Supabase access token:
+supabase/
+  migrations/          Database schema and security rules
 
-```http
-Authorization: Bearer <supabase-access-token>
+main.py                FastAPI application entry point
 ```
 
-FastAPI verifies the token and uses its `sub` claim as the user ID. Meal-log
-queries also include that user ID directly, while Supabase RLS protects direct
-database access through Supabase clients.
+Routers focus on HTTP requests and responses. Services contain most of the
+business logic, database work, external API calls, and AI payload handling.
 
-Never expose the Supabase service-role key to the frontend.
+## Main Technologies
 
-## Deployment
+- Python 3.13
+- FastAPI
+- Uvicorn
+- Pydantic 2
+- asyncpg
+- httpx
+- PyJWT
+- Supabase PostgreSQL and Auth
+- Open Food Facts
+- USDA FoodData Central
+- OpenRouter
 
-## Deploying FastAPI To Vercel
+## Deploying To Vercel
 
-The backend and frontend must be deployed as separate Vercel projects. Deploy
-this backend first.
+The backend and frontend should be deployed as separate Vercel projects. Deploy
+the backend first, then point the frontend to this backend's production URL.
 
 ### 1. Prepare Supabase
 
-Apply the database migration and obtain:
+Apply the database migrations and collect:
 
 - Supabase project URL
-- PostgreSQL pooler connection string
-- Supabase JWT secret for HS256 projects, or use project JWKS through
-  `SUPABASE_URL`
+- PostgreSQL connection string
+- Supabase JWT secret, if your project uses HS256 signing
 
 For serverless deployments, use the Supabase transaction pooler connection
-string. If Supabase does not include it automatically, append
-`?sslmode=require`.
-The API disables asyncpg's prepared-statement cache for transaction-pooler
-compatibility.
+string. If needed, add `?sslmode=require`.
 
 ### 2. Create The Backend Project
 
 Import this repository into Vercel and configure:
 
 - Root Directory: repository root
-- Framework Preset: FastAPI, if detected; otherwise Other
+- Framework Preset: FastAPI if detected, otherwise Other
 - Python version: 3.13 where available
 
-`vercel.json` routes all requests to `main.py`.
+`vercel.json` routes requests to `main.py`.
 
-### 3. Configure Vercel Variables
-
-In Vercel Project Settings, add the following for Production:
+### 3. Set Production Environment Variables
 
 ```env
 DATABASE_URL=postgresql://...
@@ -390,11 +365,7 @@ OPENROUTER_APP_NAME=Caliper
 CORS_ORIGINS=https://your-frontend.vercel.app
 ```
 
-`OPENROUTER_APP_URL` and `OPENROUTER_APP_NAME` remain optional. The other
-provider and database values are required for their respective features.
-
-Configure Preview separately. Do not give untrusted preview branches production
-database credentials.
+Do not give untrusted preview deployments production database credentials.
 
 ### 4. Deploy
 
@@ -413,38 +384,21 @@ https://your-backend.vercel.app/docs
 
 ### 5. Connect The Frontend
 
-Set the frontend Vercel project's production variable:
+Set the frontend environment variable:
 
 ```env
 EXPO_PUBLIC_API_URL=https://your-backend.vercel.app/api/v1
 ```
 
-Set backend CORS to the exact frontend origin and redeploy both projects after
-changing environment values.
-
-### Environment Strategy
-
-Use:
-
-- `.env.local`: uncommitted local secrets and localhost configuration
-- Vercel Development variables: values pulled by `vercel env pull`
-- Vercel Preview variables: staging or restricted preview services
-- Vercel Production variables: production secrets and URLs
-- `.env.example`: committed variable-name documentation
-
-Do not commit `.env.production` containing secrets. Vercel environment scoping
-is the authoritative production configuration.
-
-The application creates its asyncpg pool lazily on the first database-backed
-request. This allows `/health` to start independently and avoids crashing a
-Vercel function during module initialization.
+Also set backend `CORS_ORIGINS` to the exact frontend origin.
 
 ## Operational Notes
 
-- `openrouter/free` selects a free model dynamically. Vision capability and
-  availability depend on the models currently exposed by OpenRouter.
-- External API failures return typed `503` responses rather than raw provider
+- External provider failures return typed errors instead of raw provider
   exceptions.
-- Daily aggregation uses the supplied IANA timezone and PostgreSQL date
-  conversion.
-- CORS should be restricted to known production web origins.
+- Daily aggregation uses the timezone supplied by the app.
+- The database pool is created lazily, so `/health` can start even before the
+  first database-backed request.
+- CORS should be restricted to known production frontend origins.
+- `openrouter/free` chooses a currently available free model through
+  OpenRouter; exact model availability can change.
