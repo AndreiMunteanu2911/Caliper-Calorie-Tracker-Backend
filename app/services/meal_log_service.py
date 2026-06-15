@@ -111,8 +111,8 @@ async def create_meal_log(
         )
         values (
           $1::uuid,
-          case when $3 = 'custom' then $2::uuid else null end,
-          $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+          case when $3 = 'custom' then $2::text::uuid else null end,
+          $2::text, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
           $15, $16, $17, $18, $19, $20, $21, $22, coalesce($23, now())
         )
         returning id, external_id, source, meal_type, food_name, quantity_g,
