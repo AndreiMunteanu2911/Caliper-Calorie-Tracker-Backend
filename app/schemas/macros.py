@@ -16,3 +16,15 @@ class DailyMacroProgress(ApiModel):
     consumed: MacroTotals
     targets: MacroTotals
     remaining: MacroTotals
+
+
+class MacroHistoryEntry(ApiModel):
+    date: str
+    consumed: MacroTotals
+
+
+class MacroHistoryResponse(ApiModel):
+    days: int
+    timezone: str
+    entries: list[MacroHistoryEntry]
+    targets: MacroTotals
