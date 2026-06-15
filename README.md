@@ -13,6 +13,8 @@ aggregation, AI meal analysis, and diet advisor chat.
 - USDA FoodData Central text search
 - OpenRouter free-router vision analysis
 - Context-aware nutrition advisor chat
+- Weight logging with user-scoped history
+- TDEE and automatic calorie/macro goal calculation
 - Strict Pydantic validation
 - Typed global error responses
 - Supabase schema and Row Level Security migration
@@ -48,6 +50,7 @@ supabase/
   migrations/
     001_init.sql       Tables, functions, triggers, indexes, and RLS
     002_advisor_conversations.sql  Persistent advisor history and RLS
+    004_weight_logs.sql  Weight history, indexes, triggers, and RLS
 
 main.py                FastAPI application and global error handlers
 ```
@@ -140,6 +143,7 @@ The migrations are located at:
 ```text
 supabase/migrations/001_init.sql
 supabase/migrations/002_advisor_conversations.sql
+supabase/migrations/004_weight_logs.sql
 ```
 
 They create:
@@ -149,6 +153,7 @@ They create:
 - `meal_logs`
 - `advisor_conversations`
 - `advisor_messages`
+- `weight_logs`
 - profile creation and timestamp triggers
 - daily macro aggregation function
 - indexes for user/date and food-name access
@@ -277,6 +282,26 @@ Each advisor request includes live remaining macros, every food logged today,
 that contain food logs. Missing days are treated as incomplete data rather than
 confirmed zero intake. User and assistant messages are committed together after
 OpenRouter returns successfully.
+
+### Weight History
+
+```http
+GET    /api/v1/weight-logs
+POST   /api/v1/weight-logs
+DELETE /api/v1/weight-logs/{log_id}
+```
+
+Saving another entry for the same date updates that date's weight.
+
+### TDEE Calculator
+
+```http
+POST /api/v1/profile/tdee
+```
+
+Uses the Mifflin-St Jeor equation, an activity multiplier, and the selected
+lose, maintain, or gain goal. The response includes calorie and macro targets
+that can be applied to the user's profile.
 
 ## Error Format
 
