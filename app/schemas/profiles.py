@@ -15,6 +15,15 @@ class ProfileResponse(ApiModel):
     protein_percentage: float
     carbs_percentage: float
     fats_percentage: float
+    onboarding_status: Literal["pending", "completed", "skipped"]
+    sex: Literal["female", "male"] | None
+    age: int | None
+    height_cm: float | None
+    activity_level: Literal[
+        "sedentary", "light", "moderate", "very_active", "extra_active"
+    ] | None
+    goal: Literal["lose", "maintain", "gain"] | None
+    target_weight_kg: float | None
 
 
 class ProfileUpdate(ApiModel):
@@ -56,3 +65,9 @@ class TdeeCalculationResponse(ApiModel):
     daily_protein_target: float
     daily_carbs_target: float
     daily_fats_target: float
+
+
+class OnboardingUpdate(TdeeCalculationRequest):
+    display_name: str = Field(min_length=1, max_length=80)
+    target_weight_kg: float | None = Field(default=None, ge=20, le=500)
+    timezone: str = Field(default="UTC", min_length=1, max_length=100)

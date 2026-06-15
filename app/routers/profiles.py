@@ -6,10 +6,16 @@ from app.core.security import AuthenticatedUser, get_current_user
 from app.schemas.profiles import (
     ProfileResponse,
     ProfileUpdate,
+    OnboardingUpdate,
     TdeeCalculationRequest,
     TdeeCalculationResponse,
 )
-from app.services.profile_service import get_profile, update_profile
+from app.services.profile_service import (
+    complete_onboarding,
+    get_profile,
+    skip_onboarding,
+    update_profile,
+)
 from app.services.tdee_service import calculate_tdee
 
 router = APIRouter(prefix="/profile", tags=["profile"])
@@ -43,3 +49,25 @@ async def edit_profile(
         user.email or "",
         update,
     )
+
+
+@router.post("/onboarding", response_model=ProfileResponse)
+async def finish_onboarding(
+    update: OnboardingUpdate,
+    user: AuthenticatedUser = Depends(get_current_user),
+    connection: asyncpg.Connection = Depends(get_database),
+) -> ProfileResponse:
+    return await complete_onboarding(
+        connection,
+        user.id,
+        user.email or "",
+        update,
+    )
+
+
+@router.post("/onboarding/skip", response_model=ProfileResponse)
+async def dismiss_onboarding(
+    user: AuthenticatedUser = Depends(get_current_user),
+    connection: asyncpg.Connection = Depends(get_database),
+) -> ProfileResponse:
+    return await skip_onboarding(connection, user.id, user.email or "")

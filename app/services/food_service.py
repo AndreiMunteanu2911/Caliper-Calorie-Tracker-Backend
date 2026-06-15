@@ -66,6 +66,10 @@ async def get_food_by_barcode(
         protein=_number(nutrients.get("proteins_100g")),
         carbs=_number(nutrients.get("carbohydrates_100g")),
         fats=_number(nutrients.get("fat_100g")),
+        fiber=_number(nutrients.get("fiber_100g")),
+        sugar=_number(nutrients.get("sugars_100g")),
+        sodium_mg=_number(nutrients.get("sodium_100g")) * 1000,
+        saturated_fat=_number(nutrients.get("saturated-fat_100g")),
     )
 
 
@@ -133,6 +137,10 @@ async def search_usda_foods(
                 protein=_nutrient_value(food, {1003}),
                 carbs=_nutrient_value(food, {1005}),
                 fats=_nutrient_value(food, {1004}),
+                fiber=_nutrient_value(food, {1079}),
+                sugar=_nutrient_value(food, {2000}),
+                sodium_mg=_nutrient_value(food, {1093}),
+                saturated_fat=_nutrient_value(food, {1258}),
             )
         )
     return items

@@ -42,6 +42,22 @@ class NutritionHistorySummary:
     def average_fats(self) -> float:
         return self.total_fats / self.calendar_days
 
+    @property
+    def logged_day_average_calories(self) -> float:
+        return self.total_calories / self.logged_days if self.logged_days else 0
+
+    @property
+    def logged_day_average_protein(self) -> float:
+        return self.total_protein / self.logged_days if self.logged_days else 0
+
+    @property
+    def logged_day_average_carbs(self) -> float:
+        return self.total_carbs / self.logged_days if self.logged_days else 0
+
+    @property
+    def logged_day_average_fats(self) -> float:
+        return self.total_fats / self.logged_days if self.logged_days else 0
+
 
 def _message_from_row(row: asyncpg.Record) -> AdvisorMessage:
     return AdvisorMessage(

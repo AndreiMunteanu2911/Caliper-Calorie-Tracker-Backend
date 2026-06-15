@@ -29,7 +29,8 @@ async def search_foods(
 ) -> FoodSearchResponse:
     custom_rows = await connection.fetch(
         """
-        select id, name, brand, serving_size_g, calories, protein, carbs, fats
+        select id, name, brand, serving_size_g, calories, protein, carbs, fats,
+               fiber, sugar, sodium_mg, saturated_fat, is_favorite
         from public.custom_foods
         where user_id = $1::uuid
           and lower(name) like lower($2::text)
@@ -50,6 +51,11 @@ async def search_foods(
             protein=float(row["protein"]),
             carbs=float(row["carbs"]),
             fats=float(row["fats"]),
+            fiber=float(row["fiber"]),
+            sugar=float(row["sugar"]),
+            sodium_mg=float(row["sodium_mg"]),
+            saturated_fat=float(row["saturated_fat"]),
+            is_favorite=row["is_favorite"],
         )
         for row in custom_rows
     ]

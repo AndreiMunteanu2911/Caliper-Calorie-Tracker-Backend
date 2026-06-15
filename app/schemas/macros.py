@@ -8,6 +8,10 @@ class MacroTotals(ApiModel):
     protein: float = Field(ge=0)
     carbs: float = Field(ge=0)
     fats: float = Field(ge=0)
+    fiber: float = Field(default=0, ge=0)
+    sugar: float = Field(default=0, ge=0)
+    sodium_mg: float = Field(default=0, ge=0)
+    saturated_fat: float = Field(default=0, ge=0)
 
 
 class DailyMacroProgress(ApiModel):

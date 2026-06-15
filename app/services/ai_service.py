@@ -28,6 +28,10 @@ PLATE_SCHEMA: dict[str, Any] = {
                     "protein": {"type": "number"},
                     "carbs": {"type": "number"},
                     "fats": {"type": "number"},
+                    "fiber": {"type": "number"},
+                    "sugar": {"type": "number"},
+                    "sodium_mg": {"type": "number"},
+                    "saturated_fat": {"type": "number"},
                 },
                 "required": [
                     "name",
@@ -36,6 +40,10 @@ PLATE_SCHEMA: dict[str, Any] = {
                     "protein",
                     "carbs",
                     "fats",
+                    "fiber",
+                    "sugar",
+                    "sodium_mg",
+                    "saturated_fat",
                 ],
                 "additionalProperties": False,
             },
@@ -265,6 +273,11 @@ async def chat_with_advisor(
                         f"{history_summary.average_carbs:.1f} g\n"
                         f"Daily average fats: "
                         f"{history_summary.average_fats:.1f} g\n"
+                        f"Average on logged days: "
+                        f"{history_summary.logged_day_average_calories:.0f} kcal, "
+                        f"P {history_summary.logged_day_average_protein:.1f} g, "
+                        f"C {history_summary.logged_day_average_carbs:.1f} g, "
+                        f"F {history_summary.logged_day_average_fats:.1f} g\n"
                         "Treat missing logging days as incomplete data, not confirmed "
                         "zero intake. Refer to specific foods when useful and distinguish "
                         "observed logs from inference."
@@ -332,6 +345,11 @@ async def stream_advisor_chat(
                     f"{history_summary.average_carbs:.1f} g\n"
                     f"Daily average fats: "
                     f"{history_summary.average_fats:.1f} g\n"
+                    f"Average on logged days: "
+                    f"{history_summary.logged_day_average_calories:.0f} kcal, "
+                    f"P {history_summary.logged_day_average_protein:.1f} g, "
+                    f"C {history_summary.logged_day_average_carbs:.1f} g, "
+                    f"F {history_summary.logged_day_average_fats:.1f} g\n"
                     "Treat missing logging days as incomplete data, not confirmed "
                     "zero intake. Refer to specific foods when useful and distinguish "
                     "observed logs from inference."

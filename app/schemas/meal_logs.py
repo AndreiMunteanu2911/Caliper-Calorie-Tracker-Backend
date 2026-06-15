@@ -23,6 +23,10 @@ class MealLogCreate(ApiModel):
     logged_at: datetime | None = None
 
 
+class MealLogBulkCreate(ApiModel):
+    items: list[MealLogCreate] = Field(min_length=1, max_length=50)
+
+
 class MealLogUpdate(ApiModel):
     meal_type: MealType | None = None
     quantity_g: float | None = Field(default=None, gt=0, le=10_000)
@@ -36,6 +40,8 @@ class MealLogUpdate(ApiModel):
 
 class MealLogItem(ApiModel):
     id: str
+    external_id: str
+    source: str
     meal_type: MealType
     food_name: str
     quantity_g: float
@@ -43,6 +49,10 @@ class MealLogItem(ApiModel):
     protein: float
     carbs: float
     fats: float
+    fiber: float
+    sugar: float
+    sodium_mg: float
+    saturated_fat: float
     logged_at: datetime
 
 

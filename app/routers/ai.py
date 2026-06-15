@@ -1,4 +1,5 @@
 import json
+import logging
 
 import asyncpg
 import httpx
@@ -29,6 +30,7 @@ from app.services.ai_service import analyze_plate, chat_with_advisor, stream_adv
 from app.services.macro_service import get_daily_macro_progress
 
 router = APIRouter(prefix="/ai", tags=["ai"])
+logger = logging.getLogger("caliper.ai")
 
 
 @router.post("/analyze-plate", response_model=PlateAnalysisResponse)
@@ -183,10 +185,15 @@ async def advisor_chat_stream(
                 + "\n"
             )
         except Exception as exc:
+            logger.error(
+                "Advisor stream failed",
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
             yield json.dumps(
                 {
                     "type": "error",
-                    "message": str(exc) or "Unable to send message.",
+                    "code": "advisor_stream_failed",
+                    "message": "The advisor is temporarily unavailable. Please try again.",
                 }
             ) + "\n"
 
