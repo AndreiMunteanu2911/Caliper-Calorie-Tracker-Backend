@@ -34,7 +34,7 @@ async def search_foods(
         from public.custom_foods
         where user_id = $1::uuid
           and lower(name) like lower($2::text)
-        order by updated_at desc
+        order by is_favorite desc, last_used_at desc nulls last, updated_at desc
         limit 10
         """,
         user.id,
@@ -59,8 +59,55 @@ async def search_foods(
         )
         for row in custom_rows
     ]
+    barcode_rows = await connection.fetch(
+        """
+        with ranked as (
+          select external_id, food_name, calories_per_100g,
+                 protein_per_100g, carbs_per_100g, fats_per_100g,
+                 fiber_per_100g, sugar_per_100g, sodium_mg_per_100g,
+                 saturated_fat_per_100g, logged_at,
+                 count(*) over (partition by external_id) as use_count,
+                 row_number() over (
+                   partition by external_id
+                   order by logged_at desc, created_at desc
+                 ) as row_number
+          from public.meal_logs
+          where user_id = $1::uuid
+            and source = 'open_food_facts'
+            and lower(food_name) like lower($2::text)
+        )
+        select external_id, food_name, calories_per_100g, protein_per_100g,
+               carbs_per_100g, fats_per_100g, fiber_per_100g,
+               sugar_per_100g, sodium_mg_per_100g,
+               saturated_fat_per_100g, use_count,
+               logged_at as last_used_at
+        from ranked
+        where row_number = 1
+        order by use_count desc, last_used_at desc
+        limit 10
+        """,
+        user.id,
+        f"%{query}%",
+    )
+    barcode_items = [
+        FoodItem(
+            external_id=row["external_id"],
+            source="open_food_facts",
+            name=row["food_name"],
+            brand=None,
+            calories=float(row["calories_per_100g"]),
+            protein=float(row["protein_per_100g"]),
+            carbs=float(row["carbs_per_100g"]),
+            fats=float(row["fats_per_100g"]),
+            fiber=float(row["fiber_per_100g"]),
+            sugar=float(row["sugar_per_100g"]),
+            sodium_mg=float(row["sodium_mg_per_100g"]),
+            saturated_fat=float(row["saturated_fat_per_100g"]),
+        )
+        for row in barcode_rows
+    ]
 
     async with httpx.AsyncClient(timeout=20) as client:
         usda_items = await search_usda_foods(client, query, settings.usda_api_key)
 
-    return FoodSearchResponse(items=[*custom_items, *usda_items])
+    return FoodSearchResponse(items=[*custom_items, *barcode_items, *usda_items])

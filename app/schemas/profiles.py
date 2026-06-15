@@ -33,6 +33,7 @@ class ProfileUpdate(ApiModel):
     protein: float = Field(ge=0)
     carbs: float = Field(ge=0)
     fats: float = Field(ge=0)
+    target_weight_kg: float | None = Field(ge=20, le=500)
 
     @model_validator(mode="after")
     def validate_percentages(self) -> Self:

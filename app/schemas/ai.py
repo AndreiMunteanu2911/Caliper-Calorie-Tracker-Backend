@@ -34,6 +34,22 @@ class PlateAnalysisResponse(ApiModel):
     confidence_explanation: str
 
 
+class NutritionLabelResponse(ApiModel):
+    name: str | None = Field(default=None, max_length=300)
+    brand: str | None = Field(default=None, max_length=300)
+    serving_size_g: float = Field(gt=0)
+    calories: float = Field(ge=0)
+    protein: float = Field(ge=0)
+    carbs: float = Field(ge=0)
+    fats: float = Field(ge=0)
+    fiber: float = Field(default=0, ge=0)
+    sugar: float = Field(default=0, ge=0)
+    sodium_mg: float = Field(default=0, ge=0)
+    saturated_fat: float = Field(default=0, ge=0)
+    transcription: str
+    confidence_explanation: str
+
+
 class AdvisorMessage(ApiModel):
     id: str
     role: Literal["user", "assistant"]

@@ -78,7 +78,7 @@ async def update_profile(
         update public.profiles
         set display_name = $2, daily_calorie_target = $3,
             daily_protein_target = $4, daily_carbs_target = $5,
-            daily_fats_target = $6
+            daily_fats_target = $6, target_weight_kg = $7
         where id = $1::uuid
         returning {PROFILE_COLUMNS}
         """,
@@ -88,6 +88,7 @@ async def update_profile(
         protein,
         carbs,
         fats,
+        update.target_weight_kg,
     )
     if row is None:
         raise RuntimeError("Profile could not be updated.")

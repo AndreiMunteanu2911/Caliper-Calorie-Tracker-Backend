@@ -7,7 +7,12 @@ import httpx
 from pydantic import ValidationError
 
 from app.core.errors import ExternalServiceError
-from app.schemas.ai import AdvisorMessage, PlateAnalysisRequest, PlateAnalysisResponse
+from app.schemas.ai import (
+    AdvisorMessage,
+    NutritionLabelResponse,
+    PlateAnalysisRequest,
+    PlateAnalysisResponse,
+)
 from app.schemas.macros import DailyMacroProgress
 from app.services.advisor_service import NutritionHistorySummary, TodayMeal
 
@@ -60,6 +65,41 @@ PLATE_SCHEMA: dict[str, Any] = {
         "total_protein",
         "total_carbs",
         "total_fats",
+        "confidence_explanation",
+    ],
+    "additionalProperties": False,
+}
+
+NUTRITION_LABEL_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "name": {"type": ["string", "null"]},
+        "brand": {"type": ["string", "null"]},
+        "serving_size_g": {"type": "number"},
+        "calories": {"type": "number"},
+        "protein": {"type": "number"},
+        "carbs": {"type": "number"},
+        "fats": {"type": "number"},
+        "fiber": {"type": "number"},
+        "sugar": {"type": "number"},
+        "sodium_mg": {"type": "number"},
+        "saturated_fat": {"type": "number"},
+        "transcription": {"type": "string"},
+        "confidence_explanation": {"type": "string"},
+    },
+    "required": [
+        "name",
+        "brand",
+        "serving_size_g",
+        "calories",
+        "protein",
+        "carbs",
+        "fats",
+        "fiber",
+        "sugar",
+        "sodium_mg",
+        "saturated_fat",
+        "transcription",
         "confidence_explanation",
     ],
     "additionalProperties": False,
@@ -217,6 +257,109 @@ async def analyze_plate(
         raise ExternalServiceError(
             "OpenRouter",
             "The vision model returned an incomplete nutrition estimate.",
+        ) from exc
+
+
+async def analyze_nutrition_label(
+    client: httpx.AsyncClient,
+    request: PlateAnalysisRequest,
+    api_key: str,
+    app_url: str | None,
+    app_name: str | None,
+) -> NutritionLabelResponse:
+    _require_api_key(api_key)
+    image_content = {
+        "type": "image_url",
+        "image_url": {
+            "url": f"data:{request.media_type};base64,{request.image_base64}"
+        },
+    }
+    ocr_payload = await _post_completion(
+        client,
+        api_key,
+        app_url,
+        app_name,
+        {
+            "model": OPENROUTER_MODEL,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Act only as a literal OCR transcriber. Copy every visible "
+                        "nutrition-label line, number, unit, serving statement, product "
+                        "name, and brand. Preserve decimal points and do not calculate, "
+                        "correct, infer, or summarize anything."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Transcribe this nutrition label."},
+                        image_content,
+                    ],
+                },
+            ],
+        },
+    )
+    ocr_text = _completion_content(ocr_payload)
+    payload = await _post_completion(
+        client,
+        api_key,
+        app_url,
+        app_name,
+        {
+            "model": OPENROUTER_MODEL,
+            "provider": {"require_parameters": True},
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "nutrition_label",
+                    "strict": True,
+                    "schema": NUTRITION_LABEL_SCHEMA,
+                },
+            },
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You verify nutrition-label OCR. Independently re-read the image "
+                        "and compare it with the supplied OCR text to catch digit, decimal, "
+                        "serving-unit, and "
+                        "per-serving versus per-100g mistakes. Return nutrition normalized "
+                        "per 100g. If the label is per serving, calculate per-100g values "
+                        "from serving_size_g. Sodium must be milligrams and macros grams. "
+                        "Use zero only for optional nutrients that are absent or explicitly "
+                        "zero. Never invent a product name or brand. Explain uncertainty "
+                        "and any conversion in confidence_explanation. Return only JSON "
+                        "matching this schema: "
+                        f"{json.dumps(NUTRITION_LABEL_SCHEMA, separators=(',', ':'))}"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "Double-check and normalize this nutrition label. The user "
+                                "will review every value before saving.\n\nOCR text:\n"
+                                f"{ocr_text}"
+                            ),
+                        },
+                        image_content,
+                    ],
+                },
+            ],
+        },
+    )
+    try:
+        return NutritionLabelResponse.model_validate(
+            _extract_json_object(_completion_content(payload))
+        )
+    except ValidationError as exc:
+        raise ExternalServiceError(
+            "OpenRouter",
+            "The nutrition label could not be read reliably.",
         ) from exc
 
 

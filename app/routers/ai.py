@@ -14,6 +14,7 @@ from app.schemas.ai import (
     AdvisorConversation,
     ChatRequest,
     ChatResponse,
+    NutritionLabelResponse,
     PlateAnalysisRequest,
     PlateAnalysisResponse,
 )
@@ -26,7 +27,12 @@ from app.services.advisor_service import (
     list_conversations,
     save_exchange,
 )
-from app.services.ai_service import analyze_plate, chat_with_advisor, stream_advisor_chat
+from app.services.ai_service import (
+    analyze_nutrition_label,
+    analyze_plate,
+    chat_with_advisor,
+    stream_advisor_chat,
+)
 from app.services.macro_service import get_daily_macro_progress
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -41,6 +47,22 @@ async def analyze_plate_image(
 ) -> PlateAnalysisResponse:
     async with httpx.AsyncClient(timeout=60) as client:
         return await analyze_plate(
+            client,
+            request,
+            settings.openrouter_api_key,
+            settings.openrouter_app_url,
+            settings.openrouter_app_name,
+        )
+
+
+@router.post("/analyze-nutrition-label", response_model=NutritionLabelResponse)
+async def analyze_label_image(
+    request: PlateAnalysisRequest,
+    _: AuthenticatedUser = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> NutritionLabelResponse:
+    async with httpx.AsyncClient(timeout=60) as client:
+        return await analyze_nutrition_label(
             client,
             request,
             settings.openrouter_api_key,

@@ -59,3 +59,4 @@ class MealLogItem(ApiModel):
 class DashboardResponse(ApiModel):
     progress: DailyMacroProgress
     logs: list[MealLogItem]
+    logged_dates: list[str]

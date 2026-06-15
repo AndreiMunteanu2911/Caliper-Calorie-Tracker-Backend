@@ -66,9 +66,30 @@ async def get_dashboard(
         validated_timezone,
         requested_date,
     )
+    logged_date_rows = await connection.fetch(
+        """
+        select distinct (logged_at at time zone $2::text)::date as log_date
+        from public.meal_logs
+        where user_id = $1::uuid
+          and (logged_at at time zone $2::text)::date
+              between date_trunc(
+                'week',
+                coalesce($3::date, (now() at time zone $2::text)::date)::timestamp
+              )::date
+              and date_trunc(
+                'week',
+                coalesce($3::date, (now() at time zone $2::text)::date)::timestamp
+              )::date + 6
+        order by log_date
+        """,
+        user_id,
+        validated_timezone,
+        requested_date,
+    )
     return DashboardResponse(
         progress=progress,
         logs=[_row_to_item(row) for row in rows],
+        logged_dates=[row["log_date"].isoformat() for row in logged_date_rows],
     )
 
 
