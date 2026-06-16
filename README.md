@@ -130,7 +130,6 @@ OPENROUTER_API_KEY=your-openrouter-key
 OPENROUTER_APP_URL=
 OPENROUTER_APP_NAME=
 CORS_ORIGINS=http://localhost:8081,http://localhost:19006
-CORS_ORIGIN_REGEX=^https?://(?:localhost|127\.0\.0\.1)(?::\d+)?$
 ```
 
 Start the API:
@@ -188,7 +187,6 @@ applying them to an existing production database.
 - `OPENROUTER_APP_URL`: optional OpenRouter attribution URL.
 - `OPENROUTER_APP_NAME`: optional OpenRouter attribution name.
 - `CORS_ORIGINS`: web origins allowed to call the backend from a browser.
-- `CORS_ORIGIN_REGEX`: development-friendly origin pattern.
 
 Native iOS and Android requests are not limited by browser CORS rules, but Expo
 Web is.

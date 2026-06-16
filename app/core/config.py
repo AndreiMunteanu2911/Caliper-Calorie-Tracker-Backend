@@ -7,6 +7,18 @@ from pydantic import BaseModel, ConfigDict
 load_dotenv(".env.local")
 load_dotenv()
 
+CAPACITOR_WEBVIEW_ORIGINS = (
+    "https://localhost",
+    "capacitor://localhost",
+    "ionic://localhost",
+)
+DEFAULT_CORS_ORIGINS = (
+    "http://localhost:8081",
+    "http://localhost:19006",
+    "https://caliperam.vercel.app",
+    *CAPACITOR_WEBVIEW_ORIGINS,
+)
+
 
 class Settings(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -20,13 +32,7 @@ class Settings(BaseModel):
     openrouter_api_key: str = ""
     openrouter_app_url: str | None = None
     openrouter_app_name: str | None = None
-    cors_origins: tuple[str, ...] = (
-        "http://localhost:8081",
-        "http://localhost:19006",
-    )
-    cors_origin_regex: str | None = (
-        r"^(?:capacitor|ionic)://localhost$|^https?://(?:localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})(?::\d+)?$"
-    )
+    cors_origins: tuple[str, ...] = DEFAULT_CORS_ORIGINS
 
 
 @lru_cache
@@ -37,6 +43,16 @@ def get_settings() -> Settings:
         for origin in configured_origins.split(",")
         if origin.strip()
     )
+    allowed_origins = tuple(
+        dict.fromkeys(
+            (
+                *cors_origins,
+                *CAPACITOR_WEBVIEW_ORIGINS,
+            )
+            if cors_origins
+            else DEFAULT_CORS_ORIGINS
+        )
+    )
     return Settings(
         database_url=getenv("DATABASE_URL", ""),
         supabase_url=getenv("SUPABASE_URL", ""),
@@ -45,8 +61,5 @@ def get_settings() -> Settings:
         openrouter_api_key=getenv("OPENROUTER_API_KEY", ""),
         openrouter_app_url=getenv("OPENROUTER_APP_URL") or None,
         openrouter_app_name=getenv("OPENROUTER_APP_NAME") or None,
-        cors_origins=cors_origins
-        or ("http://localhost:8081", "http://localhost:19006"),
-        cors_origin_regex=getenv("CORS_ORIGIN_REGEX")
-        or r"^(?:capacitor|ionic)://localhost$|^https?://(?:localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})(?::\d+)?$|^https://caliperam\.vercel\.app$",
+        cors_origins=allowed_origins,
     )
