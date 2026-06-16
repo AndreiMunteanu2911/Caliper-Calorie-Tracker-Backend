@@ -25,7 +25,7 @@ class Settings(BaseModel):
         "http://localhost:19006",
     )
     cors_origin_regex: str | None = (
-        r"^https?://(?:localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})(?::\d+)?$"
+        r"^(?:capacitor|ionic)://localhost$|^https?://(?:localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})(?::\d+)?$"
     )
 
 
@@ -48,5 +48,5 @@ def get_settings() -> Settings:
         cors_origins=cors_origins
         or ("http://localhost:8081", "http://localhost:19006"),
         cors_origin_regex=getenv("CORS_ORIGIN_REGEX")
-        or r"^https?://(?:localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})(?::\d+)?$|^https://caliperam\.vercel\.app$",
+        or r"^(?:capacitor|ionic)://localhost$|^https?://(?:localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})(?::\d+)?$|^https://caliperam\.vercel\.app$",
     )
