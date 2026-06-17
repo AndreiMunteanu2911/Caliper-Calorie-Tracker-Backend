@@ -1,6 +1,7 @@
 import json
 import re
 from collections.abc import AsyncIterator
+from os import getenv
 from typing import Any
 
 import httpx
@@ -17,7 +18,7 @@ from app.schemas.macros import DailyMacroProgress
 from app.services.advisor_service import NutritionHistorySummary, TodayMeal
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-OPENROUTER_MODEL = "openrouter/free"
+OPENROUTER_MODEL = getenv("OPENROUTER_MODEL", "openrouter/free")
 
 PLATE_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -185,6 +186,12 @@ async def _post_completion(
         )
         response.raise_for_status()
         value = response.json()
+    except httpx.HTTPStatusError as exc:
+        detail = _openrouter_error_detail(exc.response)
+        raise ExternalServiceError(
+            "OpenRouter",
+            detail or "The AI service is temporarily unavailable.",
+        ) from exc
     except (httpx.HTTPError, json.JSONDecodeError) as exc:
         raise ExternalServiceError(
             "OpenRouter",
@@ -193,6 +200,28 @@ async def _post_completion(
     if not isinstance(value, dict):
         raise ExternalServiceError("OpenRouter", "The model returned invalid data.")
     return value
+
+
+def _openrouter_error_detail(response: httpx.Response) -> str | None:
+    try:
+        payload = response.json()
+    except json.JSONDecodeError:
+        return response.text.strip() or None
+    if not isinstance(payload, dict):
+        return None
+
+    error = payload.get("error")
+    if isinstance(error, dict):
+        message = error.get("message")
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+    if isinstance(error, str) and error.strip():
+        return error.strip()
+
+    message = payload.get("message")
+    if isinstance(message, str) and message.strip():
+        return message.strip()
+    return None
 
 
 async def analyze_plate(

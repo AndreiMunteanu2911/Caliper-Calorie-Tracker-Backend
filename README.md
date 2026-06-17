@@ -127,6 +127,7 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_JWT_SECRET=
 USDA_API_KEY=your-usda-key
 OPENROUTER_API_KEY=your-openrouter-key
+OPENROUTER_MODEL=
 OPENROUTER_APP_URL=
 OPENROUTER_APP_NAME=
 CORS_ORIGINS=http://localhost:8081,http://localhost:19006
@@ -398,5 +399,5 @@ Also set backend `CORS_ORIGINS` to the exact frontend origin.
 - The database pool is created lazily, so `/health` can start even before the
   first database-backed request.
 - CORS should be restricted to known production frontend origins.
-- `openrouter/free` chooses a currently available free model through
-  OpenRouter; exact model availability can change.
+- `OPENROUTER_MODEL` is optional and defaults to `openrouter/free`; set it to a
+  specific model ID when you want to pin provider behavior.
